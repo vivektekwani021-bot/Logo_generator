@@ -1,22 +1,26 @@
 import axios from 'axios';
 
-// The base URL of our backend API
+// Define the base URL for our backend API
 const API_URL = 'http://localhost:4000/api/users/';
 
-// Register user function
+// Register user
 const register = async (userData) => {
   const response = await axios.post(API_URL + 'register', userData);
+  return response.data;
+};
 
-  if (response.data) {
-    // We can store the user data (including the token) in localStorage for now
-    localStorage.setItem('user', JSON.stringify(response.data));
-  }
-
+// Login user
+const login = async (userData) => {
+  const response = await axios.post(API_URL + 'login', userData);
   return response.data;
 };
 
 const authService = {
   register,
+  login,
 };
 
 export default authService;
+
+
+

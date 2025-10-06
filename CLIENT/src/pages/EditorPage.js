@@ -1,239 +1,206 @@
-// import React, { useState, useRef, useEffect } from 'react';
-// // Corrected import: We import the specific classes we need from Fabric.js
-// import { Canvas, Circle, Rect, IText } from 'fabric';
-// import { motion } from 'framer-motion';
-
-// const EditorPage = () => {
-//   const canvasRef = useRef(null);
-//   const [canvas, setCanvas] = useState(null);
-
-//   useEffect(() => {
-//     // We now use `new Canvas()` directly
-//     const initCanvas = new Canvas(canvasRef.current, {
-//       height: 600,
-//       width: 800,
-//       backgroundColor: '#1f2937',
-//     });
-//     setCanvas(initCanvas);
-
-//     return () => {
-//       initCanvas.dispose();
-//     };
-//   }, []);
-
-//   const addCircle = () => {
-//     if (!canvas) return;
-//     // Use `new Circle()` directly
-//     const circle = new Circle({
-//       radius: 50,
-//       fill: 'red',
-//       left: 100,
-//       top: 100,
-//     });
-//     canvas.add(circle);
-//     canvas.renderAll();
-//   };
-
-//   const addRectangle = () => {
-//     if (!canvas) return;
-//     // Use `new Rect()` directly
-//     const rect = new Rect({
-//       width: 100,
-//       height: 100,
-//       fill: 'blue',
-//       left: 200,
-//       top: 200,
-//     });
-//     canvas.add(rect);
-//     canvas.renderAll();
-//   };
-
-//   const addText = () => {
-//     if (!canvas) return;
-//     // Use `new IText()` directly
-//     const text = new IText('Your Logo', {
-//       left: 150,
-//       top: 150,
-//       fill: 'white',
-//       fontSize: 40,
-//       fontFamily: 'Arial'
-//     });
-//     canvas.add(text);
-//     canvas.renderAll();
-//   };
-
-//   return (
-//     <div className="min-h-screen bg-gray-900 text-white flex flex-col md:flex-row">
-//       <motion.aside 
-//         initial={{ x: -100 }}
-//         animate={{ x: 0 }}
-//         className="w-full md:w-64 bg-gray-800 p-4 space-y-4"
-//       >
-//         <h2 className="text-xl font-bold">Tools</h2>
-//         <button onClick={addCircle} className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 rounded-md">Add Circle</button>
-//         <button onClick={addRectangle} className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 rounded-md">Add Rectangle</button>
-//         <button onClick={addText} className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 rounded-md">Add Text</button>
-//       </motion.aside>
-
-//       <main className="flex-1 flex items-center justify-center p-4">
-//         <motion.div 
-//           initial={{ scale: 0.8, opacity: 0 }}
-//           animate={{ scale: 1, opacity: 1 }}
-//           transition={{ delay: 0.2 }}
-//           className="shadow-2xl"
-//         >
-//           <canvas ref={canvasRef} />
-//         </motion.div>
-//       </main>
-//     </div>
-//   );
-// };
 
 // export default EditorPage;
 
-import React, { useState, useRef, useEffect } from 'react';
-import { fabric } from 'fabric';
+//  CODE OF COPILOT 
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Canvas, IText, Circle, Rect, Triangle } from 'fabric';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useAuth } from '../../context/AuthContext';
-import projectService from '../../api/projectService';
+import { useAuth } from '../context/AuthContext';
+import projectService from '../api/projectService';
+import {
+  FaUndo, FaRedo, FaTrash, FaArrowUp, FaArrowDown, FaFont, FaShapes,
+  FaMousePointer, FaVectorSquare, FaCircle
+} from 'react-icons/fa';
+import { SketchPicker } from 'react-color';
 
-// --- Helper Components for a Cleaner UI ---
-
+// --- Helper Components ---
 const ToolbarButton = ({ onClick, children, title }) => (
-  <button 
-    onClick={onClick} 
-    title={title} 
-    className="w-full p-2 text-left text-sm text-gray-200 hover:bg-indigo-700 rounded-md transition-colors"
+  <button
+    onClick={onClick}
+    title={title}
+    className="w-full p-3 flex items-center space-x-3 text-left text-sm text-gray-200 hover:bg-indigo-700 rounded-md transition-colors"
   >
     {children}
   </button>
 );
 
 const PropertyControl = ({ label, children }) => (
-  <div className="flex flex-col space-y-1">
-    <label className="text-xs text-gray-400">{label}</label>
+  <div className="flex flex-col space-y-2">
+    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{label}</label>
     {children}
   </div>
 );
 
 // --- Main Editor Component ---
-
 const EditorPage = () => {
   const { id: projectId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  
+
   const canvasRef = useRef(null);
   const [canvas, setCanvas] = useState(null);
   const [projectName, setProjectName] = useState('Untitled Logo');
   const [activeObject, setActiveObject] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
-  // Function to update the state based on the currently selected object
-  const updatePropertiesPanel = (obj) => {
-    if (obj) {
-      setActiveObject({
-        fill: obj.get('fill'),
-        stroke: obj.get('stroke'),
-        strokeWidth: obj.get('strokeWidth'),
-        opacity: obj.get('opacity'),
-        fontFamily: obj.get('fontFamily') || 'Arial',
-        type: obj.type
-      });
-    } else {
-      setActiveObject(null);
+  const googleFonts = [
+  'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Oswald', 'Source Sans Pro',
+  'Raleway', 'Merriweather', 'PT Sans', 'Playfair Display', 'Poppins', 'Nunito',
+  'Quicksand', 'Bebas Neue', 'Pacifico', 'Arial', 'Verdana'
+];
+
+  // --- Core Canvas & History Logic ---
+
+  const saveState = useCallback(() => {
+    if (!canvas) return;
+    const json = canvas.toJSON();
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(json);
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  }, [canvas, history, historyIndex]);
+
+  const undo = () => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      setHistoryIndex(newIndex);
+      canvas.loadFromJSON(history[newIndex], () => canvas.renderAll());
     }
   };
 
-  // Initialize canvas and set up event listeners when the component mounts
+  const redo = () => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      setHistoryIndex(newIndex);
+      canvas.loadFromJSON(history[newIndex], () => canvas.renderAll());
+    }
+  };
+
+  // Effect 1: Initialize canvas ONCE on mount
   useEffect(() => {
-    const initCanvas = new fabric.Canvas(canvasRef.current, {
+    const initCanvas = new Canvas(canvasRef.current, {
       height: 600,
       width: 800,
       backgroundColor: '#1f2937',
     });
     setCanvas(initCanvas);
 
-    // Event listeners to show/hide the properties panel
-    initCanvas.on('selection:created', (e) => updatePropertiesPanel(e.target));
-    initCanvas.on('selection:updated', (e) => updatePropertiesPanel(e.target));
-    initCanvas.on('selection:cleared', () => updatePropertiesPanel(null));
-    initCanvas.on('object:modified', (e) => updatePropertiesPanel(e.target));
+    const json = initCanvas.toJSON();
+    setHistory([json]);
+    setHistoryIndex(0);
 
-    // Clean up canvas instance on unmount
-    return () => initCanvas.dispose();
+    return () => {
+      initCanvas.dispose();
+    };
   }, []);
 
-  // Load existing project data if an ID is present in the URL
+  // Effect 2: Set up and clean up event listeners
+  useEffect(() => {
+    if (!canvas) return;
+
+    const handleSelectionCreated = (e) => setActiveObject(e.target);
+    const handleSelectionUpdated = (e) => setActiveObject(e.target);
+    const handleSelectionCleared = () => setActiveObject(null);
+
+    canvas.on('selection:created', handleSelectionCreated);
+    canvas.on('selection:updated', handleSelectionUpdated);
+    canvas.on('selection:cleared', handleSelectionCleared);
+    canvas.on('object:modified', saveState);
+
+    return () => {
+      canvas.off('selection:created', handleSelectionCreated);
+      canvas.off('selection:updated', handleSelectionUpdated);
+      canvas.off('selection:cleared', handleSelectionCleared);
+      canvas.off('object:modified', saveState);
+    };
+  }, [canvas, saveState]);
+
+  // Effect 3: Load project data
   useEffect(() => {
     if (projectId && projectId !== 'new' && canvas && user?.token) {
-      projectService.getProject(projectId, user.token)
+      projectService.getProject(projectId, user?.token)
         .then(data => {
           if (data) {
             setProjectName(data.name);
-            canvas.loadFromJSON(data.designState, canvas.renderAll.bind(canvas));
+            canvas.loadFromJSON(data.designState, () => {
+              canvas.renderAll();
+              const json = canvas.toJSON();
+              setHistory([json]);
+              setHistoryIndex(0);
+            });
           }
         })
         .catch(err => {
           console.error("Failed to load project", err);
-          navigate('/dashboard'); // Redirect if project not found or error
+          navigate('/dashboard');
         });
     }
-  }, [projectId, canvas, user?.token, navigate]);
-  
-  // --- Functions to Add Objects to the Canvas ---
+  }, [projectId, canvas, user, navigate]);
+
   const addObject = (obj) => {
     if (!canvas) return;
     canvas.add(obj);
     canvas.centerObject(obj);
     canvas.setActiveObject(obj);
     canvas.renderAll();
+    setActiveObject(obj); // Ensure panel appears immediately
+    saveState();
   };
-  
-  const addText = () => addObject(new fabric.IText('Your Text', { fill: '#fff', fontSize: 48, fontFamily: 'Arial' }));
-  const addCircle = () => addObject(new fabric.Circle({ radius: 50, fill: '#4f46e5' }));
-  const addRectangle = () => addObject(new fabric.Rect({ width: 100, height: 100, fill: '#10b981' }));
-  const addTriangle = () => addObject(new fabric.Triangle({ width: 100, height: 100, fill: '#f59e0b' }));
 
-  // --- Functions to Modify Selected Objects ---
+  const addText = () => addObject(new IText('Your Text', { fill: '#fff', fontSize: 48, fontFamily: 'Arial' }));
+  const addCircle = () => addObject(new Circle({ radius: 50, fill: '#4f46e5' }));
+  const addRectangle = () => addObject(new Rect({ width: 100, height: 100, fill: '#10b981' }));
+  const addTriangle = () => addObject(new Triangle({ width: 100, height: 100, fill: '#f59e0b' }));
+
+  const handleColorChange = (color, prop = 'fill') => {
+    const obj = canvas.getActiveObject();
+    if (!obj) return;
+    obj.set(prop, color.hex);
+    canvas.renderAll();
+    setActiveObject(obj); // Update panel
+  };
+
   const handlePropertyChange = (prop, value) => {
     const obj = canvas.getActiveObject();
     if (!obj) return;
     obj.set(prop, value);
     canvas.renderAll();
-    updatePropertiesPanel(obj); // Keep the panel in sync
+    setActiveObject(obj); // Update panel
   };
-  
+
   const deleteActiveObject = () => {
     if (canvas && canvas.getActiveObject()) {
       canvas.remove(canvas.getActiveObject());
+      setActiveObject(null);
+      saveState();
     }
   };
 
   const bringForward = () => {
     if (canvas && canvas.getActiveObject()) {
       canvas.bringForward(canvas.getActiveObject());
+      saveState();
     }
   };
 
   const sendBackwards = () => {
     if (canvas && canvas.getActiveObject()) {
       canvas.sendBackwards(canvas.getActiveObject());
+      saveState();
     }
   };
 
-  // --- Save Functionality ---
   const handleSave = async () => {
     if (!canvas || !user?.token) return;
-    
-    const designState = canvas.toJSON();
+    const designState = history[historyIndex];
     const projectData = { name: projectName, designState };
 
     try {
       if (projectId === 'new') {
         const newProject = await projectService.createProject(projectData, user.token);
-        // After creating, navigate to the new editor URL so future saves are updates
-        navigate(`/editor/${newProject._id}`, { replace: true }); 
+        navigate(`/editor/${newProject._id}`, { replace: true });
         alert('Project created successfully!');
       } else {
         await projectService.updateProject(projectId, projectData, user.token);
@@ -247,85 +214,103 @@ const EditorPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
-      {/* Header Bar */}
       <header className="w-full bg-gray-800 p-2 flex justify-between items-center shadow-md z-10">
-        <input 
-          type="text" 
-          value={projectName} 
+        <input
+          type="text"
+          value={projectName}
           onChange={(e) => setProjectName(e.target.value)}
           className="bg-transparent text-lg font-semibold border-b-2 border-transparent focus:border-indigo-500 focus:outline-none p-1"
         />
+        <div className="flex items-center gap-2">
+            <button onClick={undo} disabled={historyIndex <= 0} className="p-2 rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"><FaUndo /></button>
+            <button onClick={redo} disabled={historyIndex >= history.length - 1} className="p-2 rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"><FaRedo /></button>
+        </div>
         <div>
           <button onClick={() => navigate('/dashboard')} className="px-4 py-2 text-sm mr-2 bg-gray-700 hover:bg-gray-600 rounded-md transition-colors">Dashboard</button>
           <button onClick={handleSave} className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors">Save Project</button>
         </div>
       </header>
-      
+
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Toolbar */}
         <motion.aside initial={{ x: -100 }} animate={{ x: 0 }} className="w-56 bg-gray-800 p-4 space-y-2 overflow-y-auto">
           <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Add Elements</h3>
-          <ToolbarButton onClick={addText} title="Add Text">Text</ToolbarButton>
+          <ToolbarButton onClick={addText} title="Add Text"><FaFont className="mr-3" /> Text</ToolbarButton>
           <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider pt-4">Shapes</h3>
-          <ToolbarButton onClick={addCircle} title="Add Circle">Circle</ToolbarButton>
-          <ToolbarButton onClick={addRectangle} title="Add Rectangle">Rectangle</ToolbarButton>
-          <ToolbarButton onClick={addTriangle} title="Add Triangle">Triangle</ToolbarButton>
+          <ToolbarButton onClick={addCircle} title="Add Circle"><FaCircle className="mr-3" /> Circle</ToolbarButton>
+          <ToolbarButton onClick={addRectangle} title="Add Rectangle"><FaVectorSquare className="mr-3" /> Rectangle</ToolbarButton>
+          <ToolbarButton onClick={addTriangle} title="Add Triangle"><FaShapes className="mr-3" /> Triangle</ToolbarButton>
         </motion.aside>
 
-        {/* Main Canvas Area */}
         <main className="flex-1 flex items-center justify-center p-4 bg-gray-900">
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="shadow-2xl bg-gray-700 rounded-lg">
             <canvas ref={canvasRef} />
           </motion.div>
         </main>
 
-        {/* Right Properties Panel (Conditional Rendering) */}
-        <motion.aside 
+        <motion.aside
           initial={{ x: 300 }}
           animate={{ x: activeObject ? 0 : 300 }}
           transition={{ type: "spring", stiffness: 200, damping: 25 }}
-          className="w-64 bg-gray-800 p-4 space-y-4 overflow-y-auto"
+          className="w-72 bg-gray-800 p-4 space-y-6 overflow-y-auto"
         >
           {activeObject ? (
             <>
               <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Properties</h3>
               <PropertyControl label="Fill Color">
-                <input type="color" value={activeObject.fill} onChange={(e) => handlePropertyChange('fill', e.target.value)} className="w-full h-8 bg-gray-700 rounded cursor-pointer" />
+                  <SketchPicker
+                      color={activeObject.get('fill')}
+                      onChangeComplete={(color) => handleColorChange(color, 'fill')}
+                      disableAlpha={true}
+                      styles={{ default: { picker: { background: '#374151', boxShadow: 'none' } } }}
+                  />
               </PropertyControl>
-              <PropertyControl label="Stroke Color">
-                <input type="color" value={activeObject.stroke || '#ffffff'} onChange={(e) => handlePropertyChange('stroke', e.target.value)} className="w-full h-8 bg-gray-700 rounded cursor-pointer" />
-              </PropertyControl>
-              <PropertyControl label="Stroke Width">
-                <input type="range" min="0" max="30" value={activeObject.strokeWidth || 0} onChange={(e) => handlePropertyChange('strokeWidth', parseInt(e.target.value, 10))} className="w-full" />
-              </PropertyControl>
-              <PropertyControl label="Opacity">
-                <input type="range" min="0" max="1" step="0.01" value={activeObject.opacity} onChange={(e) => handlePropertyChange('opacity', parseFloat(e.target.value))} className="w-full" />
-              </PropertyControl>
-
+             
+<PropertyControl label="Stroke Width">
+  <input
+    type="range"
+    min="0"
+    max="30"
+    value={typeof activeObject.get('strokeWidth') === 'number' ? activeObject.get('strokeWidth') : 0}
+    onChange={e => handlePropertyChange('strokeWidth', parseInt(e.target.value, 10))}
+    className="w-full"
+  />
+</PropertyControl>
+<PropertyControl label="Opacity">
+  <input
+    type="range"
+    min="0"
+    max="1"
+    step="0.01"
+    value={typeof activeObject.get('opacity') === 'number' ? activeObject.get('opacity') : 1}
+    onChange={e => handlePropertyChange('opacity', parseFloat(e.target.value))}
+    className="w-full"
+  />
+</PropertyControl>
               {activeObject.type === 'i-text' && (
+                <>
                   <PropertyControl label="Font Family">
-                      <select value={activeObject.fontFamily} onChange={(e) => handlePropertyChange('fontFamily', e.target.value)} className="w-full p-2 bg-gray-700 rounded text-sm focus:outline-none">
-                          <option>Arial</option>
-                          <option>Verdana</option>
-                          <option>Georgia</option>
-                          <option>Times New Roman</option>
-                          <option>Courier New</option>
-                          <option>Impact</option>
+                      <select value={activeObject.get('fontFamily')} onChange={(e) => handlePropertyChange('fontFamily', e.target.value)} className="w-full p-2 bg-gray-700 rounded text-sm focus:outline-none">
+                          {googleFonts.map(font => <option key={font} value={font}>{font}</option>)}
                       </select>
                   </PropertyControl>
+                  <PropertyControl label="Font Size">
+                      <input type="number" value={activeObject.get('fontSize')} onChange={(e) => handlePropertyChange('fontSize', parseInt(e.target.value, 10))} className="w-full p-2 bg-gray-700 rounded text-sm focus:outline-none" />
+                  </PropertyControl>
+                </>
               )}
 
               <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider pt-4">Layers</h3>
-              <ToolbarButton onClick={bringForward}>Bring Forward</ToolbarButton>
-              <ToolbarButton onClick={sendBackwards}>Send Backwards</ToolbarButton>
+              <ToolbarButton onClick={bringForward}><FaArrowUp className="mr-3" /> Bring Forward</ToolbarButton>
+              <ToolbarButton onClick={sendBackwards}><FaArrowDown className="mr-3" /> Send Backwards</ToolbarButton>
 
               <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider pt-4">Actions</h3>
               <ToolbarButton onClick={deleteActiveObject}>
-                <span className="text-red-400">Delete Object</span>
+                <FaTrash className="mr-3 text-red-400" /> <span className="text-red-400">Delete Object</span>
               </ToolbarButton>
             </>
           ) : (
             <div className="text-center text-gray-500 pt-10">
+              <FaMousePointer className="mx-auto text-4xl mb-4" />
               <p className="text-sm">Select an object on the canvas to see its properties.</p>
             </div>
           )}
@@ -336,4 +321,3 @@ const EditorPage = () => {
 };
 
 export default EditorPage;
-
